@@ -16,7 +16,7 @@ router.post("/verify-email", async (req, res) => {
 
     try {
 
-        const { email } = req.body;
+        const email = req.body.email?.trim().toLowerCase();
 
 
         // ----------------------------------------------------
@@ -42,8 +42,8 @@ router.post("/verify-email", async (req, res) => {
         // ----------------------------------------------------
 
         if (
-            email.toLowerCase() ===
-            process.env.ADMIN_EMAIL.toLowerCase()
+            process.env.ADMIN_EMAIL &&
+            email === process.env.ADMIN_EMAIL.trim().toLowerCase()
         ) {
 
             return res.json({
@@ -79,7 +79,8 @@ router.post("/verify-email", async (req, res) => {
                 is_verified,
                 role
              FROM users
-             WHERE email = ?`,
+             WHERE email = ?
+             LIMIT 1`,
 
             [email]
 
@@ -111,7 +112,7 @@ router.post("/verify-email", async (req, res) => {
         // EMAIL NOT VERIFIED
         // ----------------------------------------------------
 
-        if (!user.is_verified) {
+        if (user.is_verified != 1) {
 
             return res.status(403).json({
 
@@ -129,7 +130,7 @@ router.post("/verify-email", async (req, res) => {
         // LOGIN SUCCESS
         // ----------------------------------------------------
 
-        res.json({
+        return res.json({
 
             success: true,
 
@@ -156,8 +157,10 @@ router.post("/verify-email", async (req, res) => {
 
         });
 
+    }
 
-    } catch (error) {
+
+    catch (error) {
 
         console.error(
             "LOGIN ERROR:",
@@ -165,7 +168,7 @@ router.post("/verify-email", async (req, res) => {
         );
 
 
-        res.status(500).json({
+        return res.status(500).json({
 
             success: false,
 
