@@ -7,7 +7,7 @@ const db = require("./db/database");
 
 const signupRoutes = require("./routes/signup");
 const loginRoutes = require("./routes/login");
-const configurationRoutes = require("./routes/configuration");
+const configurationRoutes = require("./routes/liftConfiguration");
 
 const app = express();
 
