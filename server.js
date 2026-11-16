@@ -7,7 +7,6 @@ const db = require("./db/database");
 
 const signupRoutes = require("./routes/signup");
 const loginRoutes = require("./routes/login");
-const configurationRoutes = require("./routes/liftConfiguration");
 
 const app = express();
 
@@ -34,7 +33,6 @@ app.use(express.json());
 
 app.use("/api/signup", signupRoutes);
 app.use("/api/login", loginRoutes);
-app.use("/api/configuration",configurationRoutes);
 
 app.get("/", (req, res) => {
     res.json({
