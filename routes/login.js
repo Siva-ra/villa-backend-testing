@@ -1,185 +1,176 @@
 const express = require("express");
-
 const router = express.Router();
-
 const db = require("../db/database");
 
-
 // ============================================================
-// LOGIN / VERIFY EMAIL
+// LOGIN / VERIFY EMAIL OR USERNAME
 //
 // POST
 // /api/login/verify-email
+//
+// Expected Request:
+// {
+//     "loginType": "email",
+//     "loginValue": "user@gmail.com"
+// }
+//
+// OR
+//
+// {
+//     "loginType": "username",
+//     "loginValue": "shagin"
+// }
 // ============================================================
 
 router.post("/verify-email", async (req, res) => {
-
     try {
 
-        const email = req.body.email?.trim().toLowerCase();
+        // ----------------------------------------------------
+        // GET LOGIN DETAILS
+        // ----------------------------------------------------
 
+        const loginType = req.body.loginType?.trim().toLowerCase();
+        const loginValue = req.body.loginValue?.trim();
 
         // ----------------------------------------------------
         // VALIDATION
         // ----------------------------------------------------
 
-        if (!email) {
-
+        if (!loginType || !loginValue) {
             return res.status(400).json({
-
                 success: false,
-
-                message:
-                    "Please enter your email"
-
+                message: "Please enter your email or username."
             });
-
         }
 
+        if (!["email", "username"].includes(loginType)) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid login type."
+            });
+        }
 
         // ----------------------------------------------------
         // ADMIN LOGIN
         // ----------------------------------------------------
 
         if (
+            loginType === "email" &&
             process.env.ADMIN_EMAIL &&
-            email === process.env.ADMIN_EMAIL.trim().toLowerCase()
+            loginValue.toLowerCase() ===
+            process.env.ADMIN_EMAIL.trim().toLowerCase()
         ) {
-
-            return res.json({
-
+            return res.status(200).json({
                 success: true,
-
-                message:
-                    "Admin login successful",
-
-                role:
-                    "admin",
-
-                email:
-                    process.env.ADMIN_EMAIL
-
+                message: "Admin login successful.",
+                userId: 0,
+                username: process.env.ADMIN_USERNAME || "Administrator",
+                mobile: "",
+                email: process.env.ADMIN_EMAIL.trim().toLowerCase(),
+                address: "",
+                role: "admin"
             });
-
         }
 
+        // ----------------------------------------------------
+        // FIND USER
+        // ----------------------------------------------------
+
+        let query;
+        let queryValue;
+
+        if (loginType === "email") {
+
+            query = `
+                SELECT
+                    id,
+                    username,
+                    mobile,
+                    email,
+                    address,
+                    is_verified,
+                    role
+                FROM users
+                WHERE email = ?
+                LIMIT 1
+            `;
+
+            queryValue = loginValue.toLowerCase();
+
+        } else {
+
+            query = `
+                SELECT
+                    id,
+                    username,
+                    mobile,
+                    email,
+                    address,
+                    is_verified,
+                    role
+                FROM users
+                WHERE LOWER(username) = LOWER(?)
+                LIMIT 1
+            `;
+
+            queryValue = loginValue;
+        }
+
+        const [users] = await db.execute(query, [queryValue]);
 
         // ----------------------------------------------------
-        // USER LOGIN
-        // ----------------------------------------------------
-
-        const [users] = await db.execute(
-
-            `SELECT
-                id,
-                username,
-                mobile,
-                email,
-                address,
-                is_verified,
-                role
-             FROM users
-             WHERE email = ?
-             LIMIT 1`,
-
-            [email]
-
-        );
-
-
-        // ----------------------------------------------------
-        // EMAIL NOT FOUND
+        // USER NOT FOUND
         // ----------------------------------------------------
 
         if (users.length === 0) {
-
             return res.status(404).json({
-
                 success: false,
-
-                message:
-                    "Email is not registered"
-
+                message: "Account not found. Please register first."
             });
-
         }
-
 
         const user = users[0];
 
-
         // ----------------------------------------------------
-        // EMAIL NOT VERIFIED
+        // EMAIL VERIFICATION CHECK
         // ----------------------------------------------------
 
-        if (user.is_verified != 1) {
-
+        if (user.is_verified !== 1 && user.is_verified !== true) {
             return res.status(403).json({
-
                 success: false,
-
-                message:
-                    "Email is not verified. Please complete registration first."
-
+                message: "Email is not verified. Please complete registration first."
             });
-
         }
-
 
         // ----------------------------------------------------
         // LOGIN SUCCESS
         // ----------------------------------------------------
 
-        return res.json({
-
+        return res.status(200).json({
             success: true,
+            message: "Login successful.",
 
-            message:
-                "Login successful",
-
-            userId:
-                user.id,
-
-            username:
-                user.username,
-
-            mobile:
-                user.mobile,
-
-            email:
-                user.email,
-
-            address:
-                user.address,
-
-            role:
-                "user"
-
+            userId: user.id,
+            username: user.username,
+            mobile: user.mobile,
+            email: user.email,
+            address: user.address,
+            role: user.role || "user"
         });
 
-    }
+    } catch (error) {
 
-
-    catch (error) {
-
-        console.error(
-            "LOGIN ERROR:",
-            error
-        );
-
+        console.error("LOGIN ERROR:", error);
 
         return res.status(500).json({
-
             success: false,
-
-            message:
-                "Login failed"
-
+            message: "Internal server error. Login failed."
         });
-
     }
-
 });
 
+// ============================================================
+// EXPORT ROUTER
+// ============================================================
 
 module.exports = router;
