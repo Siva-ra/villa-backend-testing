@@ -134,9 +134,8 @@ function isValidUsername(username) {
 }
 
 function isValidMobile(mobile) {
-
-    return /^\+?[0-9]{10,15}$/.test(mobile);
-
+    const cleanedMobile = mobile.replace(/[\s-]/g, "");
+    return /^\+?[0-9]{10,15}$/.test(cleanedMobile);
 }
 
 function isValidOTP(otp) {
