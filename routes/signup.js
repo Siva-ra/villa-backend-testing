@@ -7,25 +7,41 @@ const router = express.Router();
 const db = require("../db/database");
 
 // ============================================================
-// EMAIL CONFIGURATION
+// CONFIGURATION
 // ============================================================
+
+const OTP_EXPIRY_MINUTES = 5;
 
 const EMAIL_HOST = process.env.EMAIL_HOST;
 const EMAIL_PORT = Number(process.env.EMAIL_PORT || 587);
 const EMAIL_USER = process.env.EMAIL_USER;
 const EMAIL_PASS = process.env.EMAIL_PASS;
 
+const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || "")
+    .trim()
+    .toLowerCase();
+
+// ============================================================
+// EMAIL TRANSPORTER
+// ============================================================
+
 const transporter = nodemailer.createTransport({
+
     host: EMAIL_HOST,
+
     port: EMAIL_PORT,
+
     secure: EMAIL_PORT === 465,
+
     auth: {
         user: EMAIL_USER,
         pass: EMAIL_PASS
     },
+
     connectionTimeout: 15000,
     greetingTimeout: 15000,
     socketTimeout: 20000
+
 });
 
 // ============================================================
@@ -33,44 +49,64 @@ const transporter = nodemailer.createTransport({
 // ============================================================
 
 const sendOTPLimiter = rateLimit({
+
     windowMs: 15 * 60 * 1000,
+
     limit: 5,
-    standardHeaders: "draft-8",
+
+    standardHeaders: true,
+
     legacyHeaders: false,
+
     message: {
         success: false,
         message: "Too many OTP requests. Please try again later."
     }
+
 });
 
 const verifyOTPLimiter = rateLimit({
-    windowMs: 15 * 15 * 1000,
+
+    windowMs: 15 * 60 * 1000,
+
     limit: 10,
-    standardHeaders: "draft-8",
+
+    standardHeaders: true,
+
     legacyHeaders: false,
+
     message: {
         success: false,
         message: "Too many verification attempts. Please try again later."
     }
+
 });
 
 const resendOTPLimiter = rateLimit({
+
     windowMs: 15 * 60 * 1000,
+
     limit: 3,
-    standardHeaders: "draft-8",
+
+    standardHeaders: true,
+
     legacyHeaders: false,
+
     message: {
         success: false,
         message: "Too many resend requests. Please try again later."
     }
+
 });
 
 // ============================================================
-// GENERATE SECURE OTP
+// GENERATE OTP
 // ============================================================
 
 function generateOTP() {
+
     return crypto.randomInt(100000, 1000000).toString();
+
 }
 
 // ============================================================
@@ -78,25 +114,53 @@ function generateOTP() {
 // ============================================================
 
 function normalizeEmail(email) {
+
     return typeof email === "string"
         ? email.trim().toLowerCase()
         : "";
+
 }
 
 function isValidGmail(email) {
+
     return /^[a-zA-Z0-9._%+-]+@gmail\.com$/i.test(email);
+
 }
 
 function isValidUsername(username) {
+
     return /^[a-zA-Z0-9_]{3,30}$/.test(username);
+
 }
 
 function isValidMobile(mobile) {
+
     return /^\+?[0-9]{10,15}$/.test(mobile);
+
 }
 
 function isValidOTP(otp) {
+
     return /^[0-9]{6}$/.test(otp);
+
+}
+
+function escapeHTML(value) {
+
+    return String(value).replace(/[&<>"']/g, character => {
+
+        const entities = {
+            "&": "&amp;",
+            "<": "&lt;",
+            ">": "&gt;",
+            '"': "&quot;",
+            "'": "&#39;"
+        };
+
+        return entities[character];
+
+    });
+
 }
 
 // ============================================================
@@ -105,23 +169,32 @@ function isValidOTP(otp) {
 
 async function sendOTPEmail(email, username, otp) {
 
-    if (!EMAIL_USER || !EMAIL_PASS || !EMAIL_HOST) {
+    if (!EMAIL_HOST || !EMAIL_USER || !EMAIL_PASS) {
+
         throw new Error("Email configuration is incomplete.");
+
     }
 
+    const safeUsername = escapeHTML(username);
+
     await transporter.sendMail({
+
         from: `"VILLA Verification" <${EMAIL_USER}>`,
+
         to: email,
+
         subject: "VILLA - Email Verification OTP",
 
         text: `
 Hello ${username},
 
-Your VILLA account verification OTP is:
+Welcome to VILLA!
+
+Your email verification OTP is:
 
 ${otp}
 
-This OTP will expire in 5 minutes.
+This OTP expires in ${OTP_EXPIRY_MINUTES} minutes.
 
 If you did not request this verification, please ignore this email.
 
@@ -130,40 +203,81 @@ VILLA Team
         `,
 
         html: `
-<div style="font-family:Arial,sans-serif;max-width:500px;margin:auto;padding:25px;border:1px solid #ddd;border-radius:10px;">
-    <h2 style="color:#222;">VILLA Email Verification</h2>
+<div style="
+    font-family:Arial,sans-serif;
+    max-width:500px;
+    margin:auto;
+    padding:30px;
+    border:1px solid #ddd;
+    border-radius:12px;
+">
 
-    <p>Hello ${username},</p>
+    <h2 style="color:#222;">
+        VILLA Email Verification
+    </h2>
 
-    <p>Your account verification OTP is:</p>
+    <p>Hello ${safeUsername},</p>
 
-    <h1 style="letter-spacing:8px;color:#2563eb;">${otp}</h1>
+    <p>Welcome to VILLA!</p>
 
-    <p>This OTP will expire in <strong>5 minutes</strong>.</p>
+    <p>Your email verification OTP is:</p>
 
-    <p>If you did not request this verification, please ignore this email.</p>
+    <div style="
+        background:#f4f4f4;
+        padding:20px;
+        text-align:center;
+        border-radius:8px;
+    ">
+
+        <h1 style="
+            color:#2563eb;
+            letter-spacing:8px;
+            margin:0;
+        ">
+            ${otp}
+        </h1>
+
+    </div>
+
+    <p>
+        This OTP expires in
+        <strong>${OTP_EXPIRY_MINUTES} minutes.</strong>
+    </p>
+
+    <p>
+        If you did not request this verification,
+        please ignore this email.
+    </p>
 
     <hr>
 
-    <p style="color:#888;font-size:12px;">VILLA Team</p>
+    <p style="color:#888;font-size:12px;">
+        VILLA Team
+    </p>
+
 </div>
         `
+
     });
+
 }
 
 // ============================================================
-// CLEAR OTP AFTER EMAIL FAILURE
+// CLEAR OTP
 // ============================================================
 
 async function clearOTP(email) {
 
     await db.execute(
+
         `UPDATE users
          SET otp = NULL,
              otp_expires_at = NULL
          WHERE email = ?
          AND is_verified = 0`,
+
         [email]
+
     );
 
 }
@@ -175,10 +289,10 @@ async function clearOTP(email) {
 //
 // Request:
 // {
-//     "username": "testuser",
-//     "mobile": "9876543210",
-//     "email": "test@gmail.com",
-//     "address": "Chennai"
+//   "username": "testuser",
+//   "mobile": "9876543210",
+//   "email": "test@gmail.com",
+//   "address": "Chennai"
 // }
 // ============================================================
 
@@ -189,23 +303,23 @@ router.post("/send-otp", sendOTPLimiter, async (req, res) => {
     try {
 
         // ----------------------------------------------------
-        // GET INPUT
+        // GET REQUEST DATA
         // ----------------------------------------------------
 
         const username =
-            typeof req.body.username === "string"
+            typeof req.body?.username === "string"
                 ? req.body.username.trim()
                 : "";
 
         const mobile =
-            typeof req.body.mobile === "string"
+            typeof req.body?.mobile === "string"
                 ? req.body.mobile.trim()
                 : "";
 
-        email = normalizeEmail(req.body.email);
+        email = normalizeEmail(req.body?.email);
 
         const address =
-            typeof req.body.address === "string"
+            typeof req.body?.address === "string"
                 ? req.body.address.trim()
                 : "";
 
@@ -216,8 +330,11 @@ router.post("/send-otp", sendOTPLimiter, async (req, res) => {
         if (!username || !mobile || !email || !address) {
 
             return res.status(400).json({
+
                 success: false,
+
                 message: "Username, mobile, email and address are required."
+
             });
 
         }
@@ -229,8 +346,11 @@ router.post("/send-otp", sendOTPLimiter, async (req, res) => {
         if (!isValidUsername(username)) {
 
             return res.status(400).json({
+
                 success: false,
+
                 message: "Username must contain 3-30 letters, numbers or underscores."
+
             });
 
         }
@@ -242,8 +362,11 @@ router.post("/send-otp", sendOTPLimiter, async (req, res) => {
         if (!isValidMobile(mobile)) {
 
             return res.status(400).json({
+
                 success: false,
+
                 message: "Please enter a valid mobile number."
+
             });
 
         }
@@ -255,21 +378,27 @@ router.post("/send-otp", sendOTPLimiter, async (req, res) => {
         if (address.length < 3 || address.length > 1000) {
 
             return res.status(400).json({
+
                 success: false,
+
                 message: "Please enter a valid address."
+
             });
 
         }
 
         // ----------------------------------------------------
-        // GMAIL VALIDATION
+        // EMAIL VALIDATION
         // ----------------------------------------------------
 
         if (!isValidGmail(email)) {
 
             return res.status(400).json({
+
                 success: false,
+
                 message: "Please enter a valid Gmail address."
+
             });
 
         }
@@ -278,14 +407,14 @@ router.post("/send-otp", sendOTPLimiter, async (req, res) => {
         // ADMIN EMAIL CHECK
         // ----------------------------------------------------
 
-        if (
-            process.env.ADMIN_EMAIL &&
-            email === normalizeEmail(process.env.ADMIN_EMAIL)
-        ) {
+        if (ADMIN_EMAIL && email === ADMIN_EMAIL) {
 
             return res.status(400).json({
+
                 success: false,
+
                 message: "This email is reserved for administrator."
+
             });
 
         }
@@ -295,11 +424,14 @@ router.post("/send-otp", sendOTPLimiter, async (req, res) => {
         // ----------------------------------------------------
 
         const [emailRows] = await db.execute(
+
             `SELECT id, username, is_verified
              FROM users
              WHERE email = ?
              LIMIT 1`,
+
             [email]
+
         );
 
         if (
@@ -308,8 +440,11 @@ router.post("/send-otp", sendOTPLimiter, async (req, res) => {
         ) {
 
             return res.status(409).json({
+
                 success: false,
+
                 message: "Gmail already exists."
+
             });
 
         }
@@ -319,19 +454,25 @@ router.post("/send-otp", sendOTPLimiter, async (req, res) => {
         // ----------------------------------------------------
 
         const [usernameRows] = await db.execute(
+
             `SELECT id
              FROM users
              WHERE LOWER(username) = LOWER(?)
              AND email <> ?
              LIMIT 1`,
+
             [username, email]
+
         );
 
         if (usernameRows.length > 0) {
 
             return res.status(409).json({
+
                 success: false,
+
                 message: "Username already exists."
+
             });
 
         }
@@ -342,17 +483,22 @@ router.post("/send-otp", sendOTPLimiter, async (req, res) => {
 
         const otp = generateOTP();
 
+        // ----------------------------------------------------
+        // SAVE OTP EXPIRY
+        // ----------------------------------------------------
+
         const expiry = new Date(
-            Date.now() + 5 * 60 * 1000
+            Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000
         );
 
         // ----------------------------------------------------
-        // SAVE USER
+        // UPDATE OR CREATE USER
         // ----------------------------------------------------
 
         if (emailRows.length > 0) {
 
             await db.execute(
+
                 `UPDATE users
                  SET username = ?,
                      mobile = ?,
@@ -361,7 +507,9 @@ router.post("/send-otp", sendOTPLimiter, async (req, res) => {
                      otp_expires_at = ?,
                      is_verified = 0,
                      role = 'user'
-                 WHERE email = ?`,
+                 WHERE email = ?
+                 AND is_verified = 0`,
+
                 [
                     username,
                     mobile,
@@ -370,11 +518,13 @@ router.post("/send-otp", sendOTPLimiter, async (req, res) => {
                     expiry,
                     email
                 ]
+
             );
 
         } else {
 
             await db.execute(
+
                 `INSERT INTO users
                 (
                     username,
@@ -387,6 +537,7 @@ router.post("/send-otp", sendOTPLimiter, async (req, res) => {
                     role
                 )
                 VALUES (?, ?, ?, ?, ?, ?, 0, 'user')`,
+
                 [
                     username,
                     mobile,
@@ -395,6 +546,7 @@ router.post("/send-otp", sendOTPLimiter, async (req, res) => {
                     otp,
                     expiry
                 ]
+
             );
 
         }
@@ -409,25 +561,38 @@ router.post("/send-otp", sendOTPLimiter, async (req, res) => {
 
         } catch (emailError) {
 
-            console.error("OTP EMAIL ERROR:", emailError.message);
-            console.error("SMTP ERROR CODE:", emailError.code || "N/A");
+            console.error(
+                "OTP EMAIL ERROR:",
+                emailError.message
+            );
+
+            console.error(
+                "SMTP ERROR CODE:",
+                emailError.code || "N/A"
+            );
 
             await clearOTP(email);
 
             return res.status(500).json({
+
                 success: false,
+
                 message: "Unable to send verification email. Please try again."
+
             });
 
         }
 
         // ----------------------------------------------------
-        // SUCCESS
+        // SUCCESS RESPONSE
         // ----------------------------------------------------
 
         return res.status(200).json({
+
             success: true,
+
             message: "OTP sent successfully to your Gmail."
+
         });
 
     } catch (error) {
@@ -435,8 +600,11 @@ router.post("/send-otp", sendOTPLimiter, async (req, res) => {
         console.error("SEND OTP ERROR:", error);
 
         return res.status(500).json({
+
             success: false,
+
             message: "Failed to send OTP. Please try again."
+
         });
 
     }
@@ -450,8 +618,8 @@ router.post("/send-otp", sendOTPLimiter, async (req, res) => {
 //
 // Request:
 // {
-//     "email": "test@gmail.com",
-//     "otp": "123456"
+//   "email": "test@gmail.com",
+//   "otp": "123456"
 // }
 // ============================================================
 
@@ -459,10 +627,14 @@ router.post("/verify-otp", verifyOTPLimiter, async (req, res) => {
 
     try {
 
-        const email = normalizeEmail(req.body.email);
+        // ----------------------------------------------------
+        // GET REQUEST DATA
+        // ----------------------------------------------------
+
+        const email = normalizeEmail(req.body?.email);
 
         const otp =
-            typeof req.body.otp === "string"
+            typeof req.body?.otp === "string"
                 ? req.body.otp.trim()
                 : "";
 
@@ -473,8 +645,11 @@ router.post("/verify-otp", verifyOTPLimiter, async (req, res) => {
         if (!email || !otp) {
 
             return res.status(400).json({
+
                 success: false,
+
                 message: "Email and OTP are required."
+
             });
 
         }
@@ -482,8 +657,11 @@ router.post("/verify-otp", verifyOTPLimiter, async (req, res) => {
         if (!isValidGmail(email) || !isValidOTP(otp)) {
 
             return res.status(400).json({
+
                 success: false,
+
                 message: "Invalid email or OTP format."
+
             });
 
         }
@@ -493,28 +671,24 @@ router.post("/verify-otp", verifyOTPLimiter, async (req, res) => {
         // ----------------------------------------------------
 
         const [users] = await db.execute(
-            `SELECT
-                id,
-                username,
-                email,
-                otp,
-                otp_expires_at,
-                is_verified
+
+            `SELECT id, username, email, is_verified
              FROM users
              WHERE email = ?
              LIMIT 1`,
-            [email]
-        );
 
-        // ----------------------------------------------------
-        // USER NOT FOUND
-        // ----------------------------------------------------
+            [email]
+
+        );
 
         if (users.length === 0) {
 
             return res.status(404).json({
+
                 success: false,
+
                 message: "User not found. Please register first."
+
             });
 
         }
@@ -522,84 +696,111 @@ router.post("/verify-otp", verifyOTPLimiter, async (req, res) => {
         const user = users[0];
 
         // ----------------------------------------------------
-        // ALREADY VERIFIED
+        // CHECK VERIFICATION STATUS
         // ----------------------------------------------------
 
         if (Number(user.is_verified) === 1) {
 
             return res.status(400).json({
+
                 success: false,
+
                 message: "Email is already verified."
+
             });
 
         }
 
         // ----------------------------------------------------
-        // OTP NOT AVAILABLE
+        // VERIFY OTP AT DATABASE LEVEL
         // ----------------------------------------------------
 
-        if (!user.otp || !user.otp_expires_at) {
-
-            return res.status(400).json({
-                success: false,
-                message: "OTP not found. Please request a new OTP."
-            });
-
-        }
-
-        // ----------------------------------------------------
-        // OTP EXPIRY CHECK
-        // ----------------------------------------------------
-
-        const expiryTime = new Date(user.otp_expires_at).getTime();
-
-        if (
-            Number.isNaN(expiryTime) ||
-            expiryTime < Date.now()
-        ) {
-
-            await clearOTP(email);
-
-            return res.status(400).json({
-                success: false,
-                message: "OTP has expired. Please request a new OTP."
-            });
-
-        }
-
-        // ----------------------------------------------------
-        // OTP MATCH CHECK
-        // ----------------------------------------------------
-
-        if (String(user.otp) !== otp) {
-
-            return res.status(400).json({
-                success: false,
-                message: "Invalid OTP."
-            });
-
-        }
-
-        // ----------------------------------------------------
-        // VERIFY USER
-        // ----------------------------------------------------
+        // NOW() checks expiry using the database server clock.
+        // This avoids comparing different application/database
+        // timezone settings.
 
         const [result] = await db.execute(
+
             `UPDATE users
              SET is_verified = 1,
                  otp = NULL,
                  otp_expires_at = NULL
              WHERE email = ?
+             AND otp = ?
              AND is_verified = 0
-             AND otp = ?`,
+             AND otp_expires_at IS NOT NULL
+             AND otp_expires_at > NOW()`,
+
             [email, otp]
+
         );
+
+        // ----------------------------------------------------
+        // VERIFICATION RESULT
+        // ----------------------------------------------------
 
         if (result.affectedRows !== 1) {
 
-            return res.status(409).json({
+            const [checkRows] = await db.execute(
+
+                `SELECT otp, otp_expires_at
+                 FROM users
+                 WHERE email = ?
+                 LIMIT 1`,
+
+                [email]
+
+            );
+
+            if (checkRows.length === 0) {
+
+                return res.status(404).json({
+
+                    success: false,
+
+                    message: "User not found."
+
+                });
+
+            }
+
+            const currentUser = checkRows[0];
+
+            if (!currentUser.otp) {
+
+                return res.status(400).json({
+
+                    success: false,
+
+                    message: "OTP not found. Please request a new OTP."
+
+                });
+
+            }
+
+            if (
+                !currentUser.otp_expires_at ||
+                new Date(currentUser.otp_expires_at).getTime() <= Date.now()
+            ) {
+
+                await clearOTP(email);
+
+                return res.status(400).json({
+
+                    success: false,
+
+                    message: "OTP has expired. Please request a new OTP."
+
+                });
+
+            }
+
+            return res.status(400).json({
+
                 success: false,
-                message: "OTP verification could not be completed. Please try again."
+
+                message: "Invalid OTP."
+
             });
 
         }
@@ -609,9 +810,13 @@ router.post("/verify-otp", verifyOTPLimiter, async (req, res) => {
         // ----------------------------------------------------
 
         return res.status(200).json({
+
             success: true,
+
             message: "Email verified successfully.",
+
             role: "user"
+
         });
 
     } catch (error) {
@@ -619,8 +824,11 @@ router.post("/verify-otp", verifyOTPLimiter, async (req, res) => {
         console.error("VERIFY OTP ERROR:", error);
 
         return res.status(500).json({
+
             success: false,
+
             message: "OTP verification failed."
+
         });
 
     }
@@ -634,17 +842,15 @@ router.post("/verify-otp", verifyOTPLimiter, async (req, res) => {
 //
 // Request:
 // {
-//     "email": "test@gmail.com"
+//   "email": "test@gmail.com"
 // }
 // ============================================================
 
 router.post("/resend-otp", resendOTPLimiter, async (req, res) => {
 
-    let email = "";
+    const email = normalizeEmail(req.body?.email);
 
     try {
-
-        email = normalizeEmail(req.body.email);
 
         // ----------------------------------------------------
         // VALIDATION
@@ -653,8 +859,11 @@ router.post("/resend-otp", resendOTPLimiter, async (req, res) => {
         if (!email) {
 
             return res.status(400).json({
+
                 success: false,
+
                 message: "Email is required."
+
             });
 
         }
@@ -662,8 +871,11 @@ router.post("/resend-otp", resendOTPLimiter, async (req, res) => {
         if (!isValidGmail(email)) {
 
             return res.status(400).json({
+
                 success: false,
+
                 message: "Please enter a valid Gmail address."
+
             });
 
         }
@@ -673,25 +885,24 @@ router.post("/resend-otp", resendOTPLimiter, async (req, res) => {
         // ----------------------------------------------------
 
         const [users] = await db.execute(
-            `SELECT
-                id,
-                username,
-                is_verified
+
+            `SELECT id, username, is_verified
              FROM users
              WHERE email = ?
              LIMIT 1`,
-            [email]
-        );
 
-        // ----------------------------------------------------
-        // USER NOT FOUND
-        // ----------------------------------------------------
+            [email]
+
+        );
 
         if (users.length === 0) {
 
             return res.status(404).json({
+
                 success: false,
+
                 message: "User not found. Please register first."
+
             });
 
         }
@@ -699,14 +910,17 @@ router.post("/resend-otp", resendOTPLimiter, async (req, res) => {
         const user = users[0];
 
         // ----------------------------------------------------
-        // ALREADY VERIFIED
+        // CHECK VERIFICATION STATUS
         // ----------------------------------------------------
 
         if (Number(user.is_verified) === 1) {
 
             return res.status(400).json({
+
                 success: false,
+
                 message: "Email is already verified."
+
             });
 
         }
@@ -718,28 +932,43 @@ router.post("/resend-otp", resendOTPLimiter, async (req, res) => {
         const otp = generateOTP();
 
         const expiry = new Date(
-            Date.now() + 5 * 60 * 1000
+            Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000
         );
 
         // ----------------------------------------------------
         // UPDATE OTP
         // ----------------------------------------------------
 
-        await db.execute(
+        const [updateResult] = await db.execute(
+
             `UPDATE users
              SET otp = ?,
                  otp_expires_at = ?
              WHERE email = ?
              AND is_verified = 0`,
+
             [
                 otp,
                 expiry,
                 email
             ]
+
         );
 
+        if (updateResult.affectedRows !== 1) {
+
+            return res.status(409).json({
+
+                success: false,
+
+                message: "Unable to update OTP. Please try again."
+
+            });
+
+        }
+
         // ----------------------------------------------------
-        // SEND EMAIL
+        // SEND NEW OTP EMAIL
         // ----------------------------------------------------
 
         try {
@@ -748,14 +977,24 @@ router.post("/resend-otp", resendOTPLimiter, async (req, res) => {
 
         } catch (emailError) {
 
-            console.error("RESEND EMAIL ERROR:", emailError.message);
-            console.error("SMTP ERROR CODE:", emailError.code || "N/A");
+            console.error(
+                "RESEND EMAIL ERROR:",
+                emailError.message
+            );
+
+            console.error(
+                "SMTP ERROR CODE:",
+                emailError.code || "N/A"
+            );
 
             await clearOTP(email);
 
             return res.status(500).json({
+
                 success: false,
+
                 message: "Unable to resend OTP. Please try again."
+
             });
 
         }
@@ -765,8 +1004,11 @@ router.post("/resend-otp", resendOTPLimiter, async (req, res) => {
         // ----------------------------------------------------
 
         return res.status(200).json({
+
             success: true,
+
             message: "New OTP sent successfully."
+
         });
 
     } catch (error) {
@@ -774,8 +1016,11 @@ router.post("/resend-otp", resendOTPLimiter, async (req, res) => {
         console.error("RESEND OTP ERROR:", error);
 
         return res.status(500).json({
+
             success: false,
+
             message: "Failed to resend OTP."
+
         });
 
     }
