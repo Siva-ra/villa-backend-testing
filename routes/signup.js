@@ -312,7 +312,7 @@ router.post("/send-otp", sendOTPLimiter, async (req, res) => {
 
         const mobile =
             typeof req.body?.mobile === "string"
-                ? req.body.mobile.trim()
+                ? req.body.mobile.trim().replace(/[\s-]/g, "")
                 : "";
 
         email = normalizeEmail(req.body?.email);

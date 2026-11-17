@@ -97,7 +97,7 @@ app.get("/health", async (req, res) => {
 
     try {
 
-        await db.query("SELECT 1");
+        await db.testConnection();
 
         return res.status(200).json({
             success: true,
@@ -206,7 +206,7 @@ async function startServer() {
 
         // Verify database connection before starting server.
 
-        await db.query("SELECT 1");
+        await db.testConnection();
 
         console.log("Database connection successful.");
 
