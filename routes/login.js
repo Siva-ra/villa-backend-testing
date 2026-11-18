@@ -1,4 +1,6 @@
 const express = require("express");
+const jwt = require("jsonwebtoken");
+
 const router = express.Router();
 const db = require("../db/database");
 
@@ -44,6 +46,19 @@ router.post("/verify-email", async (req, res) => {
         }
 
         // ----------------------------------------------------
+        // JWT CONFIGURATION CHECK
+        // ----------------------------------------------------
+
+        if (!process.env.JWT_SECRET) {
+            console.error("JWT_SECRET is not configured.");
+
+            return res.status(500).json({
+                success: false,
+                message: "Server authentication configuration error."
+            });
+        }
+
+        // ----------------------------------------------------
         // ADMIN LOGIN
         // ----------------------------------------------------
 
@@ -53,15 +68,39 @@ router.post("/verify-email", async (req, res) => {
             loginValue.toLowerCase() ===
             process.env.ADMIN_EMAIL.trim().toLowerCase()
         ) {
+
+            const adminEmail =
+                process.env.ADMIN_EMAIL.trim().toLowerCase();
+
+            const adminUsername =
+                process.env.ADMIN_USERNAME || "Administrator";
+
+            // Generate Admin JWT Token
+            const token = jwt.sign(
+                {
+                    userId: 0,
+                    email: adminEmail,
+                    username: adminUsername,
+                    role: "admin"
+                },
+                process.env.JWT_SECRET,
+                {
+                    expiresIn: "8h"
+                }
+            );
+
             return res.status(200).json({
                 success: true,
                 message: "Admin login successful.",
+
                 userId: 0,
-                username: process.env.ADMIN_USERNAME || "Administrator",
+                username: adminUsername,
                 mobile: "",
-                email: process.env.ADMIN_EMAIL.trim().toLowerCase(),
+                email: adminEmail,
                 address: "",
-                role: "admin"
+                role: "admin",
+
+                token: token
             });
         }
 
@@ -111,7 +150,10 @@ router.post("/verify-email", async (req, res) => {
             queryValue = loginValue;
         }
 
-        const [users] = await db.execute(query, [queryValue]);
+        const [users] = await db.execute(
+            query,
+            [queryValue]
+        );
 
         // ----------------------------------------------------
         // USER NOT FOUND
@@ -130,9 +172,7 @@ router.post("/verify-email", async (req, res) => {
         // EMAIL VERIFICATION CHECK
         // ----------------------------------------------------
 
-        if (
-            Number(user.is_verified) !== 1
-        ) {
+        if (Number(user.is_verified) !== 1) {
             return res.status(403).json({
                 success: false,
                 message: "Email is not verified. Please complete registration first."
