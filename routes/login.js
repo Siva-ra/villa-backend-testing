@@ -5,21 +5,7 @@ const db = require("../db/database");
 // ============================================================
 // LOGIN / VERIFY EMAIL OR USERNAME
 //
-// POST
-// /api/login/verify-email
-//
-// Expected Request:
-// {
-//     "loginType": "email",
-//     "loginValue": "user@gmail.com"
-// }
-//
-// OR
-//
-// {
-//     "loginType": "username",
-//     "loginValue": "shagin"
-// }
+// POST /api/login/verify-email
 // ============================================================
 
 router.post("/verify-email", async (req, res) => {
@@ -29,8 +15,15 @@ router.post("/verify-email", async (req, res) => {
         // GET LOGIN DETAILS
         // ----------------------------------------------------
 
-        const loginType = req.body.loginType?.trim().toLowerCase();
-        const loginValue = req.body.loginValue?.trim();
+        const loginType =
+            typeof req.body.loginType === "string"
+                ? req.body.loginType.trim().toLowerCase()
+                : "";
+
+        const loginValue =
+            typeof req.body.loginValue === "string"
+                ? req.body.loginValue.trim()
+                : "";
 
         // ----------------------------------------------------
         // VALIDATION
@@ -88,6 +81,7 @@ router.post("/verify-email", async (req, res) => {
                     mobile,
                     email,
                     address,
+                    created_at,
                     is_verified,
                     role
                 FROM users
@@ -106,6 +100,7 @@ router.post("/verify-email", async (req, res) => {
                     mobile,
                     email,
                     address,
+                    created_at,
                     is_verified,
                     role
                 FROM users
@@ -135,12 +130,38 @@ router.post("/verify-email", async (req, res) => {
         // EMAIL VERIFICATION CHECK
         // ----------------------------------------------------
 
-        if (user.is_verified !== 1 && user.is_verified !== true) {
+        if (
+            Number(user.is_verified) !== 1
+        ) {
             return res.status(403).json({
                 success: false,
                 message: "Email is not verified. Please complete registration first."
             });
         }
+
+        // ----------------------------------------------------
+        // SAVE SUCCESSFUL LOGIN HISTORY
+        // ----------------------------------------------------
+
+        await db.execute(
+            `
+                INSERT INTO user_login_logs
+                (
+                    user_id,
+                    username,
+                    email,
+                    created_at,
+                    login_time
+                )
+                VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+            `,
+            [
+                user.id,
+                user.username,
+                user.email,
+                user.created_at
+            ]
+        );
 
         // ----------------------------------------------------
         // LOGIN SUCCESS

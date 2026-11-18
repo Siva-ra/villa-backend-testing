@@ -8,24 +8,12 @@ const db = require("./db/database");
 
 const signupRoutes = require("./routes/signup");
 const loginRoutes = require("./routes/login");
+const auditLogRoutes = require("./routes/auditLogs");
 
 const app = express();
 
 const PORT = Number(process.env.PORT) || 3000;
-
-// ============================================================
-// SECURITY MIDDLEWARE
-// ============================================================
-
 app.use(helmet());
-
-// ============================================================
-// CORS CONFIGURATION
-// ============================================================
-
-// Native Unity applications generally do not require CORS.
-// If using Unity WebGL, replace "*" with your actual frontend
-// domain before production deployment.
 
 const allowedOrigins = process.env.ALLOWED_ORIGINS
     ? process.env.ALLOWED_ORIGINS.split(",").map(origin => origin.trim())
@@ -55,10 +43,6 @@ app.use(
     })
 );
 
-// ============================================================
-// REQUEST BODY CONFIGURATION
-// ============================================================
-
 app.use(express.json({
     limit: "10kb"
 }));
@@ -68,17 +52,11 @@ app.use(express.urlencoded({
     limit: "10kb"
 }));
 
-// ============================================================
-// API ROUTES
-// ============================================================
-
 app.use("/api/signup", signupRoutes);
 
 app.use("/api/login", loginRoutes);
 
-// ============================================================
-// ROOT ROUTE
-// ============================================================
+app.use("/api/audit-logs", auditLogRoutes);
 
 app.get("/", (req, res) => {
 
