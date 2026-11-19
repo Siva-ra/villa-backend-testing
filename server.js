@@ -261,5 +261,3 @@ process.on("SIGINT", () => shutdown("SIGINT"));
 // ============================================================
 
 startServer();
-
-module.exports = app;
